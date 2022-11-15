@@ -24,14 +24,14 @@ def main():
     testset = Dataset('test')
 
     # Tạo model, khai số step và epoch, khai loại optimizer
-    yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, training=True, CLASSES=TRAIN_CLASSES)
+    yolo = Create_Yolov3()
 
     
     # ----------------------------------------------------------------
     # Vòng lặp epoch để train model
     for epoch in range(TRAIN_EPOCHS):
         # Gọi hàm dùng để train
-
+        
         # Viết kết quả train vào trong log
 
 
