@@ -9,6 +9,7 @@ from app.dataset import Dataset
 from app.yolov3 import Create_Yolov3
 from app.train_function import train_step, validate_step
 from app.cal_mAP import cal_mAP
+from app.utils import *
 
 # Định nghĩa nội dung hàm main
 def main():
@@ -32,8 +33,8 @@ def main():
 
     # Đọc vào weights nếu train từ yolov3 gốc hoặc train từ checkpoint
     if TRAIN_TRANSFER:
-        Darknet = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=YOLO_COCO_CLASSES)
-        load_yolo_weights(Darknet, Darknet_weights) # use darknet weights
+        Darknet = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES = YOLO_COCO_CLASSES)
+        load_yolo_weights(Darknet, YOLO_V3_WEIGHTS) # use darknet weights
 
     if TRAIN_FROM_CHECKPOINT:
         try:
