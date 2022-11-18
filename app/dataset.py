@@ -22,7 +22,7 @@ class Dataset(object):
         self.anchor_per_scale = YOLO_ANCHOR_PER_SCALE
         self.max_bbox_per_scale = YOLO_MAX_BBOX_PER_SCALE
 
-        self.annotations = self.load_annotations(dataset_type)
+        self.annotations = self.load_annotations()
         self.num_samples = len(self.annotations)
         self.num_batchs = int(np.ceil(self.num_samples / self.batch_size))
     

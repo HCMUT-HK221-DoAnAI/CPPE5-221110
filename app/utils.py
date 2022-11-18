@@ -7,13 +7,14 @@ import random
 import colorsys
 from app.configs import *
 
-def load_yolo_weights(model, weights_file) -> None:
+def load_yolo_weights(model, weights_file):
     tf.keras.backend.clear_session() # used to reset layer names
     # load Darknet original weights to TensorFlow model
     range1 = 75
     range2 = [58, 66, 74]
     
     with open(weights_file, 'rb') as wf:
+        major, minor, revision, seen, _ = np.fromfile(wf, dtype=np.int32, count=5)
         j = 0
         for i in range(range1):
             if i > 0:
@@ -59,7 +60,7 @@ def read_class_names(class_filename):
     names = {}
     with open(class_filename) as data:
         for ID, name in enumerate(data):
-            names[ID] = data.strip('\n')
+            names[ID] = name.strip('\n')
     return names
 
 def image_preprocess(image, target_size, gt_boxes=None):
