@@ -5,8 +5,8 @@
 import os
 import tensorflow as tf
 import numpy as np
-from configs import *
-from utils import *
+from app.configs import *
+from app.utils import *
 import shutil
 import json
 import time
@@ -112,13 +112,10 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         image_data = image[np.newaxis, ...].astype(np.float32)
 
         t1 = time.time()
-        if YOLO_FRAMEWORK == "tf":
-            if tf.__version__ > '2.4.0':
-                pred_bbox = Yolo(image_data)
-            else:
-                pred_bbox = Yolo.predict(image_data)
+        if tf.__version__ > '2.4.0':
+            pred_bbox = Yolo(image_data)
         else:
-            raise ValueError("Unknown Framework!\n")
+            pred_bbox = Yolo.predict(image_data)
         t2 = time.time()
 
         times.append(t2 - t1)
