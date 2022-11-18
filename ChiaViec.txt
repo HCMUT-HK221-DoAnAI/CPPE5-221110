@@ -1,5 +1,0 @@
-Vương:
-+ app.yolov3.py 
-
-Toàn:
-+ app.cal_mAP.py
