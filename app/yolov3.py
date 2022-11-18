@@ -10,10 +10,17 @@ from keras.regularizers import L2
 from app.configs import *
 from app.utils import *
 
+class BatchNormalization(BatchNormalization):
+    def call(self, x, training=False):
+        if not training:
+            training = tf.constant(False)
+        training = tf.logical_and(training, self.trainable)
+        return super().call(x, training)
+
 STRIDES = np.array(YOLO_STRIDES)
 ANCHORS = (np.array(YOLO_ANCHORS).T/STRIDES).T
 # Định nghĩa các nội dung liên quan
-def convolutional(input_shape, kernel_size, filters, downsample=False, activation=True, bn=True):
+def convolutional(input_shape, filters_shape, downsample=False, activation=True, bn=True):
     # Kiểm tra downsample
     if downsample is True:
         input_shape = ZeroPadding2D(((1,0),(0,1)))(input_shape)
@@ -23,8 +30,8 @@ def convolutional(input_shape, kernel_size, filters, downsample=False, activatio
         padding = 'same'
         strides = 1
     # Định nghĩa lớp Conv2D
-    conv = Conv2D(filters=filters, kernel_size=kernel_size, strides=strides, padding=padding,
-                  use_bias=not bn, kernel_regularizer=L2(l2=0.0005),
+    conv = Conv2D(filters=filters_shape[-1], kernel_size = filters_shape[0], strides=strides,
+                  padding=padding, use_bias=not bn, kernel_regularizer=L2(l2=0.0005),
                   kernel_initializer=tf.random_normal_initializer(stddev=0.01),
                   bias_initializer=tf.constant_initializer(0.))(input_shape)
     # Lớp conv có 2 loại, có và không BatchNormalization
@@ -34,10 +41,10 @@ def convolutional(input_shape, kernel_size, filters, downsample=False, activatio
         conv = LeakyReLU(alpha=0.1)(conv)
     return conv
 
-def residual_block(input_shape, filters_1, filters_2):
-    short_cut = input_shape
-    conv = convolutional(input_shape, 1, filters_1)
-    conv = convolutional(conv, 3, filters_2)
+def residual_block(input_layer, input_channel, filter_num1, filter_num2):
+    short_cut = input_layer
+    conv = convolutional(input_layer, filters_shape=(1, 1, input_channel, filter_num1))
+    conv = convolutional(conv, filters_shape=(3, 3, filter_num1, filter_num2))
     residual_output = short_cut + conv
     return residual_output
 
@@ -47,33 +54,33 @@ def upsample(input_shape):
 # Sắp xếp các lớp đã định nghĩa thành mạng darknet theo hình minh họa
 def darknet53(input_data):
     # 2 lớp convolutional đầu tiên
-    input_data = convolutional(input_data, 3, 32)
-    input_data = convolutional(input_data, 3, 64, downsample = True)
+    input_data = convolutional(input_data, (3, 3,  3,  32))
+    input_data = convolutional(input_data, (3, 3, 32,  64), downsample=True)
 
     for i in range(1):
-        input_data = residual_block(input_data, 32, 64)
+        input_data = residual_block(input_data,  64,  32, 64)
 
-    input_data = convolutional(input_data, 3, 128, downsample = True)
+    input_data = convolutional(input_data, (3, 3,  64, 128), downsample=True)
 
     for i in range(2):
-        input_data = residual_block(input_data, 64, 128)
+        input_data = residual_block(input_data, 128,  64, 128)
 
-    input_data = convolutional(input_data, 3, 256, downsample = True)
+    input_data = convolutional(input_data, (3, 3, 128, 256), downsample=True)
 
     for i in range(8):
-        input_data = residual_block(input_data, 128, 256)
+        input_data = residual_block(input_data, 256, 128, 256)
     # Lưu lớp dự đoán tầng 1
     route_1 = input_data
-    input_data = convolutional(input_data, 3, 512, downsample = True)
+    input_data = convolutional(input_data, (3, 3, 256, 512), downsample=True)
 
     for i in range(8):
-        input_data = residual_block(input_data, 256, 512)
+        input_data = residual_block(input_data, 512, 256, 512)
     # Lưu lớp dự đoán tầng 2
     route_2 = input_data
-    input_data = convolutional(input_data, 3, 1024, downsample = True)
+    input_data = convolutional(input_data, (3, 3, 512, 1024), downsample=True)
 
     for i in range(4):
-        input_data = residual_block(input_data, 512, 1024)
+        input_data = residual_block(input_data, 1024, 512, 1024)
     # Trả về kết quả của lớp dự đoán tầng 1, tầng 2 và tầng cuối theo mô hình darknet53
     return route_1, route_2, input_data
 # ----------------------------------------------------------------
@@ -82,50 +89,50 @@ def YOLOv3(input_layer, NUM_CLASS):
     # Lấy kết quả của 3 lớp dự đoán theo kiến trúc của darknet53
     route_1, route_2, conv = darknet53(input_layer)
     # Dẫn lớp conv (lớp cuối cùng) qua các lớp convolutional để có conv_lbbox
-    conv = convolutional(conv, 1, 512)
-    conv = convolutional(conv, 3, 1024)
-    conv = convolutional(conv, 1, 512)
-    conv = convolutional(conv, 3, 1024)
-    conv = convolutional(conv, 1, 512)  # Checkpoint1 để xử lí tiếp cho lớp dự đoán tầng 2
+    conv = convolutional(conv, (1, 1, 1024,  512))
+    conv = convolutional(conv, (3, 3,  512, 1024))
+    conv = convolutional(conv, (1, 1, 1024,  512))
+    conv = convolutional(conv, (3, 3,  512, 1024))
+    conv = convolutional(conv, (1, 1, 1024,  512))  # Checkpoint1 để xử lí tiếp cho lớp dự đoán tầng 2
     # Áp dụng 2 lớp Conv2D để được kết quả dự đoán cho tầng cuối.
-    conv_lbbox = convolutional(conv, 3, 1024)
+    conv_lbbox = convolutional(conv, (3, 3, 512, 1024))
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_lbbox dùng để dự đoán các vật thể lớn. Shape = [20,20,30]
-    conv_lbbox = convolutional(conv_lbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)
+    conv_lbbox = convolutional(conv_lbbox, (1, 1, 1024, 3*(NUM_CLASS + 5)), activation=False, bn=False)
 
     # Từ lớp conv được chú thích là checkpoint1 ở trên ta áp dụng Conv2D và Upsampling2D để nối với route_2
-    conv = convolutional(conv, 1, 256)
+    conv = convolutional(conv, (1, 1,  512,  256))
     conv = upsample(conv)
     # Sau đó ta nối với lớp dự đoán route_2
     conv = tf.concat([conv,route_2], axis=-1)
     # Tiếp tục dẫn lớp conv sau khi đã nối với route_2 qua các lớp convolutional để có conv_mbbox
-    conv = convolutional(conv, 1, 256)
-    conv = convolutional(conv, 3, 512)
-    conv = convolutional(conv, 1, 256)
-    conv = convolutional(conv, 3, 512)
-    conv = convolutional(conv, 1, 256) # Checkpoint2 để xử lí tiếp cho lớp dự đoán tầng 1
+    conv = convolutional(conv, (1, 1, 768, 256))
+    conv = convolutional(conv, (3, 3, 256, 512))
+    conv = convolutional(conv, (1, 1, 512, 256))
+    conv = convolutional(conv, (3, 3, 256, 512))
+    conv = convolutional(conv, (1, 1, 512, 256)) # Checkpoint2 để xử lí tiếp cho lớp dự đoán tầng 1
     # Áp dụng 2 lớp Conv2D để được kết quả dự đoán cho tầng dự đoán thứ 2.
-    conv_mbbox = convolutional(conv, 3, 512)
+    conv_mbbox = convolutional(conv, (3, 3, 256, 512))
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_mbbox dùng để dự đoán các vật thể trung bình. Shape = [40,40,30]
-    conv_mbbox = convolutional(conv_mbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)
+    conv_mbbox = convolutional(conv_mbbox, (1, 1, 512, 3*(NUM_CLASS + 5)), activation=False, bn=False)
 
     # Từ lớp conv được chú thích là checkpoint2 ở trên ta áp dụng Conv2D và Upsampling2D để nối với route_1
-    conv = convolutional(conv, 1, 128)
+    conv = convolutional(conv, (1, 1, 256, 128))
     conv = upsample(conv)
     # Sau đó ta nối với lớp dự đoán route_1
     conv = tf.concat([conv,route_1], axis=-1)
     # Tiếp tục dẫn lớp conv sau khi đã nối với route_1 qua các lớp convolutional để có conv_sbbox
-    conv = convolutional(conv, 1, 128)
-    conv = convolutional(conv, 3, 256)
-    conv = convolutional(conv, 1, 128)
-    conv = convolutional(conv, 3, 256)
-    conv = convolutional(conv, 1, 128)
+    conv = convolutional(conv, (1, 1, 384, 128))
+    conv = convolutional(conv, (3, 3, 128, 256))
+    conv = convolutional(conv, (1, 1, 256, 128))
+    conv = convolutional(conv, (3, 3, 128, 256))
+    conv = convolutional(conv, (1, 1, 256, 128))
     # Áp dụng 2 lớp Conv2D để được kết quả dự đoán cho tầng dự đoán thứ 1.
-    conv_sbbox = convolutional(conv, 3, 256)
+    conv_sbbox = convolutional(conv, (3, 3, 128, 256))
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_sbbox dùng để dự đoán các vật thể trung nhỏ. Shape = [80,80,30]
-    conv_sbbox = convolutional(conv_mbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)    
+    conv_sbbox = convolutional(conv_sbbox, (1, 1, 256, 3*(NUM_CLASS +5)), activation=False, bn=False)
     # Trả về kết quả của filters các lớp dự đoán
     return [conv_sbbox, conv_mbbox, conv_lbbox]
 
