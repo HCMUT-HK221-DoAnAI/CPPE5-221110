@@ -3,8 +3,12 @@ YOLO_INPUT_SIZE = 640
 YOLO_ANCHOR_PER_SCALE = 3
 YOLO_MAX_BBOX_PER_SCALE = 100
 YOLO_FRAMEWORK = "tf"
+YOLO_COCO_CLASSES = "model_data/coco/coco.names"
+YOLO_V3_WEIGHTS = "model_data/yolov3.weights"
 # Train options
 TRAIN_LOAD_IMAGES_TO_RAM = True
+TRAIN_TRANSFER = False
+
 TRAIN_LOGDIR = "log"
 TRAIN_ANNOT_PATH = "./model_data/train.txt"
 TRAIN_CLASSES = "./model_data/names.txt"

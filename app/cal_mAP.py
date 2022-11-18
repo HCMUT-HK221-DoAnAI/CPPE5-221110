@@ -75,9 +75,9 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
 
         # Lấy annotation trong data <end>
 
-        bounding_boxes = [] # danh sách các bounding box
 
-        
+
+        bounding_boxes = [] # danh sách các bounding box
 
         for i in range(num_bbox_ground_truth):
             class_name = NUM_CLASS[classes_ground_truth[i]]
@@ -90,7 +90,7 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
             else:
                 class_ground_truth_counter[class_name] = 1
 
-            bbox_mess = ' '.join([class_name, xmin, ymin, xmax, ymax]) + '\n'
+            # bbox_mess = ' '.join([class_name, xmin, ymin, xmax, ymax]) + '\n'
 
         with open(f'{ground_truth_dir_path}/{str(index)}_ground_truth.json', 'w') as outfile:
             json.dump(bounding_boxes, outfile)
@@ -249,16 +249,18 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         return mAP*100
 
 
-def main():
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if len(gpus) > 0:
-        try: 
-            tf.config.experimental.set_memory_growth(gpus[0], True)
-        except:
-            RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')\n")
-    return None
+# def main():
+#     gpus = tf.config.experimental.list_physical_devices('GPU')
+#     if len(gpus) > 0:
+#         try: 
+#             tf.config.experimental.set_memory_growth(gpus[0], True)
+#         except:
+#             RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')\n")
+
+
+#     return None
 
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()

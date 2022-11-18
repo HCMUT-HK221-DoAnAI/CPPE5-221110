@@ -8,7 +8,8 @@ from app.configs import *
 from app.dataset import Dataset
 from app.yolov3 import Create_Yolov3
 from app.train_function import train_step, validate_step
-from app.cal_mAP import get_mAP
+from app.cal_mAP import cal_mAP
+from app.utils import *
 
 # Định nghĩa nội dung hàm main
 def main():
@@ -29,6 +30,27 @@ def main():
 
     # Tạo model 
     yolo = Create_Yolov3()
+
+    # Đọc vào weights nếu train từ yolov3 gốc hoặc train từ checkpoint
+    if TRAIN_TRANSFER:
+        Darknet = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES = YOLO_COCO_CLASSES)
+        load_yolo_weights(Darknet, YOLO_V3_WEIGHTS) # use darknet weights
+
+    if TRAIN_FROM_CHECKPOINT:
+        try:
+            yolo.load_weights(f"./checkpoints/{TRAIN_MODEL_NAME}")
+        except ValueError:
+            print("Shapes are incompatible, transfering Darknet weights")
+            TRAIN_FROM_CHECKPOINT = False
+
+    if TRAIN_TRANSFER and not TRAIN_FROM_CHECKPOINT:
+        for i, l in enumerate(Darknet.layers):
+            layer_weights = l.get_weights()
+            if layer_weights != []:
+                try:
+                    yolo.layers[i].set_weights(layer_weights)
+                except:
+                    print("skipping", yolo.layers[i].name)
 
     # Khai báo số step và epoch
     steps_per_epoch = len(trainset)
@@ -97,7 +119,7 @@ def main():
     # Load weight đã thu được sau khi train vào trong model; gọi hàm tính mAP và xuất kết quả
     try:
         mAP_model.load_weights(save_directory) # use keras weights
-        get_mAP(mAP_model, testset, score_threshold=TEST_SCORE_THRESHOLD, 
+        cal_mAP(mAP_model, testset, score_threshold=TEST_SCORE_THRESHOLD, 
                             iou_threshold=TEST_IOU_THRESHOLD)
     except UnboundLocalError:
         print("You don't have saved model weights to measure mAP, check TRAIN_SAVE_BEST_ONLY and \
