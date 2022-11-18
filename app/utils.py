@@ -1,5 +1,59 @@
 import cv2
 import numpy as np
+from configs import *
+import tensorflow as tf
+import random
+import colorsys
+
+def load_yolo_weights(model, weights_file) -> None:
+    tf.keras.backend.clear_session() # used to reset layer names
+    # load Darknet original weights to TensorFlow model
+    range1 = 75
+    range2 = [58, 66, 74]
+    
+    with open(weights_file, 'rb') as wf:
+        major, minor, revision, seen, _ = np.fromfile(wf, dtype=np.int32, count=5)
+
+        j = 0
+        for i in range(range1):
+            if i > 0:
+                conv_layer_name = 'conv2d_%d' %i
+            else:
+                conv_layer_name = 'conv2d'
+                
+            if j > 0:
+                bn_layer_name = 'batch_normalization_%d' %j
+            else:
+                bn_layer_name = 'batch_normalization'
+            
+            conv_layer = model.get_layer(conv_layer_name)
+            filters = conv_layer.filters
+            k_size = conv_layer.kernel_size[0]
+            in_dim = conv_layer.input_shape[-1]
+
+            if i not in range2:
+                # darknet weights: [beta, gamma, mean, variance]
+                bn_weights = np.fromfile(wf, dtype=np.float32, count=4 * filters)
+                # tf weights: [gamma, beta, mean, variance]
+                bn_weights = bn_weights.reshape((4, filters))[[1, 0, 2, 3]]
+                bn_layer = model.get_layer(bn_layer_name)
+                j += 1
+            else:
+                conv_bias = np.fromfile(wf, dtype=np.float32, count=filters)
+
+            # darknet shape (out_dim, in_dim, height, width)
+            conv_shape = (filters, in_dim, k_size, k_size)
+            conv_weights = np.fromfile(wf, dtype=np.float32, count=np.product(conv_shape))
+            # tf shape (height, width, in_dim, out_dim)
+            conv_weights = conv_weights.reshape(conv_shape).transpose([2, 3, 1, 0])
+
+            if i not in range2:
+                conv_layer.set_weights([conv_weights])
+                bn_layer.set_weights(bn_weights)
+            else:
+                conv_layer.set_weights([conv_weights, conv_bias])
+
+        assert len(wf.read()) == 0, 'failed to read all data'
 
 def read_class_names(class_filename):
     names = {}
@@ -121,3 +175,91 @@ def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
             cls_bboxes = cls_bboxes[score_mask]
 
     return best_bboxes
+
+def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, Text_colors=(255,255,0), rectangle_colors='', tracking=False):   
+    NUM_CLASS = read_class_names(CLASSES)
+    num_classes = len(NUM_CLASS)
+    image_h, image_w, _ = image.shape
+    hsv_tuples = [(1.0 * x / num_classes, 1., 1.) for x in range(num_classes)]
+    #print("hsv_tuples", hsv_tuples)
+    colors = list(map(lambda x: colorsys.hsv_to_rgb(*x), hsv_tuples))
+    colors = list(map(lambda x: (int(x[0] * 255), int(x[1] * 255), int(x[2] * 255)), colors))
+
+    random.seed(0)
+    random.shuffle(colors)
+    random.seed(None)
+
+    for i, bbox in enumerate(bboxes):
+        coor = np.array(bbox[:4], dtype=np.int32)
+        score = bbox[4]
+        class_ind = int(bbox[5])
+        bbox_color = rectangle_colors if rectangle_colors != '' else colors[class_ind]
+        bbox_thick = int(0.6 * (image_h + image_w) / 1000)
+        if bbox_thick < 1: bbox_thick = 1
+        fontScale = 0.75 * bbox_thick
+        (x1, y1), (x2, y2) = (coor[0], coor[1]), (coor[2], coor[3])
+
+        # put object rectangle
+        cv2.rectangle(image, (x1, y1), (x2, y2), bbox_color, bbox_thick*2)
+
+        if show_label:
+            # get text label
+            score_str = " {:.2f}".format(score) if show_confidence else ""
+
+            if tracking: score_str = " "+str(score)
+
+            try:
+                label = "{}".format(NUM_CLASS[class_ind]) + score_str
+            except KeyError:
+                print("You received KeyError, this might be that you are trying to use yolo original weights")
+                print("while using custom classes, if using custom model in configs.py set YOLO_CUSTOM_WEIGHTS = True")
+
+            # get text size
+            (text_width, text_height), baseline = cv2.getTextSize(label, cv2.FONT_HERSHEY_COMPLEX_SMALL,
+                                                                  fontScale, thickness=bbox_thick)
+            # put filled text rectangle
+            cv2.rectangle(image, (x1, y1), (x1 + text_width, y1 - text_height - baseline), bbox_color, thickness=cv2.FILLED)
+
+            # put text above rectangle
+            cv2.putText(image, label, (x1, y1-4), cv2.FONT_HERSHEY_COMPLEX_SMALL,
+                        fontScale, Text_colors, bbox_thick, lineType=cv2.LINE_AA)
+
+    return image
+
+def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=False, score_threshold=0.3, iou_threshold=0.45, rectangle_colors=''):
+    original_image      = cv2.imread(image_path)
+    original_image      = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    original_image      = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+
+    image_data = image_preprocess(np.copy(original_image), [input_size, input_size])
+    image_data = image_data[np.newaxis, ...].astype(np.float32)
+
+    if YOLO_FRAMEWORK == "tf":
+        pred_bbox = Yolo.predict(image_data)
+    elif YOLO_FRAMEWORK == "trt":
+        batched_input = tf.constant(image_data)
+        result = Yolo(batched_input)
+        pred_bbox = []
+        for key, value in result.items():
+            value = value.numpy()
+            pred_bbox.append(value)
+        
+    pred_bbox = [tf.reshape(x, (-1, tf.shape(x)[-1])) for x in pred_bbox]
+    pred_bbox = tf.concat(pred_bbox, axis=0)
+    
+    bboxes = postprocess_boxes(pred_bbox, original_image, input_size, score_threshold)
+    bboxes = nms(bboxes, iou_threshold, method='nms')
+
+    image = draw_bbox(original_image, bboxes, CLASSES=CLASSES, rectangle_colors=rectangle_colors)
+    # CreateXMLfile("XML_Detections", str(int(time.time())), original_image, bboxes, read_class_names(CLASSES))
+
+    if output_path != '': cv2.imwrite(output_path, image)
+    if show:
+        # Show the image
+        cv2.imshow("predicted image", image)
+        # Load and hold the image
+        cv2.waitKey(0)
+        # To close the window after the required kill value was provided
+        cv2.destroyAllWindows()
+        
+    return image
