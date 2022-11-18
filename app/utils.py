@@ -1,9 +1,11 @@
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import cv2
 import numpy as np
-from configs import *
 import tensorflow as tf
 import random
 import colorsys
+from app.configs import *
 
 def load_yolo_weights(model, weights_file) -> None:
     tf.keras.backend.clear_session() # used to reset layer names
@@ -12,8 +14,6 @@ def load_yolo_weights(model, weights_file) -> None:
     range2 = [58, 66, 74]
     
     with open(weights_file, 'rb') as wf:
-        major, minor, revision, seen, _ = np.fromfile(wf, dtype=np.int32, count=5)
-
         j = 0
         for i in range(range1):
             if i > 0:
@@ -234,15 +234,8 @@ def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=Fa
     image_data = image_preprocess(np.copy(original_image), [input_size, input_size])
     image_data = image_data[np.newaxis, ...].astype(np.float32)
 
-    if YOLO_FRAMEWORK == "tf":
-        pred_bbox = Yolo.predict(image_data)
-    elif YOLO_FRAMEWORK == "trt":
-        batched_input = tf.constant(image_data)
-        result = Yolo(batched_input)
-        pred_bbox = []
-        for key, value in result.items():
-            value = value.numpy()
-            pred_bbox.append(value)
+    # Tạo box dự đoán vật thể
+    pred_bbox = Yolo.predict(image_data)
         
     pred_bbox = [tf.reshape(x, (-1, tf.shape(x)[-1])) for x in pred_bbox]
     pred_bbox = tf.concat(pred_bbox, axis=0)
