@@ -8,7 +8,7 @@ from app.configs import *
 from app.dataset import Dataset
 from app.yolov3 import Create_Yolov3
 from app.train_function import train_step, validate_step
-from app.cal_mAP import get_mAP
+from app.cal_mAP import cal_mAP
 
 # Định nghĩa nội dung hàm main
 def main():
@@ -97,7 +97,7 @@ def main():
     # Load weight đã thu được sau khi train vào trong model; gọi hàm tính mAP và xuất kết quả
     try:
         mAP_model.load_weights(save_directory) # use keras weights
-        get_mAP(mAP_model, testset, score_threshold=TEST_SCORE_THRESHOLD, 
+        cal_mAP(mAP_model, testset, score_threshold=TEST_SCORE_THRESHOLD, 
                             iou_threshold=TEST_IOU_THRESHOLD)
     except UnboundLocalError:
         print("You don't have saved model weights to measure mAP, check TRAIN_SAVE_BEST_ONLY and \

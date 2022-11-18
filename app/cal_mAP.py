@@ -249,16 +249,18 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         return mAP*100
 
 
-def main():
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if len(gpus) > 0:
-        try: 
-            tf.config.experimental.set_memory_growth(gpus[0], True)
-        except:
-            RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')\n")
-    return None
+# def main():
+#     gpus = tf.config.experimental.list_physical_devices('GPU')
+#     if len(gpus) > 0:
+#         try: 
+#             tf.config.experimental.set_memory_growth(gpus[0], True)
+#         except:
+#             RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')\n")
+
+
+#     return None
 
 
 
-if __name__ == '__main__':
-    main()
+# if __name__ == '__main__':
+#     main()
