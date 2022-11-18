@@ -2,12 +2,12 @@
 # ------------------------------------------------------------------------------
 # Load các thư viện cần thiết
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import tensorflow as tf
 import shutil
 from app.configs import *
 from app.dataset import Dataset
-from app.yolov3 import Create_Yolov3
-from app.train_function import train_step, validate_step
+from app.yolov3 import Create_Yolov3, compute_loss
 from app.cal_mAP import cal_mAP
 from app.utils import *
 
@@ -64,7 +64,6 @@ def main():
     # val_loss khởi tạo
     best_val_loss = 1000
     
-    
     # ----------------------------------------------------------------
     # Vòng lặp epoch để train model
     for epoch in range(TRAIN_EPOCHS):
@@ -111,11 +110,107 @@ def main():
             save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME)
             yolo.save_weights(save_directory)
             best_val_loss = total_val/count
+    # Hàm để train và validate model
+    def train_step(image_data, target):
+        with tf.GradientTape() as tape:
+            pred_result = yolo(image_data, training=True)
+            giou_loss=conf_loss=prob_loss=0
 
+            grid = 3
+            for i in range(grid):
+                conv, pred = pred_result[i*2], pred_result[i*2+1]
+                loss_items = compute_loss(pred, conv, *target[i], i, CLASSES=TRAIN_CLASSES)
+                giou_loss += loss_items[0]
+                conf_loss += loss_items[1]
+                prob_loss += loss_items[2]
 
+            total_loss = giou_loss + conf_loss + prob_loss
+
+            gradients = tape.gradient(total_loss, yolo.trainable_variables)
+            optimizer.apply_gradients(zip(gradients, yolo.trainable_variables))
+
+            global_steps.assign_add(1)
+            if global_steps < warmup_steps:# and not TRAIN_TRANSFER:
+                lr = global_steps / warmup_steps * TRAIN_LR_INIT
+            else:
+                lr = TRAIN_LR_END + 0.5 * (TRAIN_LR_INIT - TRAIN_LR_END)*(
+                    (1 + tf.cos((global_steps - warmup_steps) / (total_steps - warmup_steps) * np.pi)))
+            optimizer.lr.assign(lr.numpy())
+
+            # Viết dữ liệu thống kê kết quả đối với từng step trong epoch
+            with writer.as_default():
+                tf.summary.scalar("lr", optimizer.lr, step=global_steps)
+                tf.summary.scalar("loss/total_loss", total_loss, step=global_steps)
+                tf.summary.scalar("loss/giou_loss", giou_loss, step=global_steps)
+                tf.summary.scalar("loss/conf_loss", conf_loss, step=global_steps)
+                tf.summary.scalar("loss/prob_loss", prob_loss, step=global_steps)
+            writer.flush()
+            
+        return global_steps.numpy(), optimizer.lr.numpy(), giou_loss.numpy(), conf_loss.numpy(), prob_loss.numpy(), total_loss.numpy()
+
+    validate_writer = tf.summary.create_file_writer(TRAIN_LOGDIR)
+    
+    def validate_step(image_data, target):
+        with tf.GradientTape() as tape:
+            pred_result = yolo(image_data, training=False)
+            giou_loss=conf_loss=prob_loss=0
+
+            grid = 3
+            for i in range(grid):
+                conv, pred = pred_result[i*2], pred_result[i*2+1]
+                loss_items = compute_loss(pred, conv, *target[i], i, CLASSES=TRAIN_CLASSES)
+                giou_loss += loss_items[0]
+                conf_loss += loss_items[1]
+                prob_loss += loss_items[2]
+
+            total_loss = giou_loss + conf_loss + prob_loss
+            
+        return giou_loss.numpy(), conf_loss.numpy(), prob_loss.numpy(), total_loss.numpy()
     # ----------------------------------------------------------------
     # Tạo model dùng để đo mAP
     mAP_model = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
+    best_val_loss = 1000 # should be large at start
+    # In kết quả cho từng step đối với từng epoch trong quá trình train (verbose=1)
+    for epoch in range(TRAIN_EPOCHS):
+        for image_data, target in trainset:
+            results = train_step(image_data, target)
+            cur_step = results[0]%steps_per_epoch
+            print("epoch:{:2.0f} step:{:5.0f}/{}, lr:{:.6f}, giou_loss:{:7.2f}, conf_loss:{:7.2f}, prob_loss:{:7.2f}, total_loss:{:7.2f}"
+                  .format(epoch, cur_step, steps_per_epoch, results[1], results[2], results[3], results[4], results[5]))
+
+        if len(testset) == 0:
+            print("configure TEST options to validate model")
+            yolo.save_weights(os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME))
+            continue
+        
+        count, giou_val, conf_val, prob_val, total_val = 0., 0, 0, 0, 0
+        for image_data, target in testset:
+            results = validate_step(image_data, target)
+            count += 1
+            giou_val += results[0]
+            conf_val += results[1]
+            prob_val += results[2]
+            total_val += results[3]
+        # Ghi lại thống kê kết quả cho từng epoch
+        with validate_writer.as_default():
+            tf.summary.scalar("validate_loss/total_val", total_val/count, step=epoch)
+            tf.summary.scalar("validate_loss/giou_val", giou_val/count, step=epoch)
+            tf.summary.scalar("validate_loss/conf_val", conf_val/count, step=epoch)
+            tf.summary.scalar("validate_loss/prob_val", prob_val/count, step=epoch)
+        validate_writer.flush()
+            
+        print("\n\ngiou_val_loss:{:7.2f}, conf_val_loss:{:7.2f}, prob_val_loss:{:7.2f}, total_val_loss:{:7.2f}\n\n".
+              format(giou_val/count, conf_val/count, prob_val/count, total_val/count))
+        if TRAIN_SAVE_CHECKPOINT and not TRAIN_SAVE_BEST_ONLY:
+            save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME+"_val_loss_{:7.2f}".format(total_val/count))
+            yolo.save_weights(save_directory)
+        if TRAIN_SAVE_BEST_ONLY and best_val_loss>total_val/count:
+            save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME)
+            yolo.save_weights(save_directory)
+            best_val_loss = total_val/count
+        if not TRAIN_SAVE_BEST_ONLY and not TRAIN_SAVE_CHECKPOINT:
+            save_directory = os.path.join(TRAIN_CHECKPOINTS_FOLDER, TRAIN_MODEL_NAME)
+            yolo.save_weights(save_directory)
     # Load weight đã thu được sau khi train vào trong model; gọi hàm tính mAP và xuất kết quả
     try:
         mAP_model.load_weights(save_directory) # use keras weights
@@ -124,7 +219,6 @@ def main():
     except UnboundLocalError:
         print("You don't have saved model weights to measure mAP, check TRAIN_SAVE_BEST_ONLY and \
                 TRAIN_SAVE_CHECKPOINT lines in configs.py")
-    
 # ------------------------------------------------------------------------------
 # Gọi hàm main 
 if __name__ == '__main__':

@@ -2,17 +2,12 @@
 # ------------------------------------------------------------------------------
 # Load các thư viện cần thiết
 import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import cv2
-import random
 import numpy as np
-import tensorflow as tf
-from utils import read_class_names, image_preprocess
-from yolov3 import bbox_iou
-from configs import *
+from app.utils import read_class_names, image_preprocess
+from app.configs import *
 
 # Định nghĩa nội dung Class Dataset
-
 class Dataset(object):
     def __init__(self, dataset_type):
         self.annot_path  = TRAIN_ANNOT_PATH if dataset_type == 'train' else TEST_ANNOT_PATH

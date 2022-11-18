@@ -8,6 +8,7 @@ import numpy as np
 from keras.layers import Conv2D, Input, LeakyReLU, ZeroPadding2D, BatchNormalization
 from keras.regularizers import L2
 from app.configs import *
+from app.utils import *
 
 STRIDES = np.array(YOLO_STRIDES)
 ANCHORS = (np.array(YOLO_ANCHORS).T/STRIDES).T
@@ -77,7 +78,7 @@ def darknet53(input_data):
     return route_1, route_2, input_data
 # ----------------------------------------------------------------
 # Dựa vào kết quả của darknet53 để rút ra kết quả ở 3 tỉ lệ ảnh
-def YOLOv3(input_layer):
+def YOLOv3(input_layer, NUM_CLASS):
     # Lấy kết quả của 3 lớp dự đoán theo kiến trúc của darknet53
     route_1, route_2, conv = darknet53(input_layer)
     # Dẫn lớp conv (lớp cuối cùng) qua các lớp convolutional để có conv_lbbox
@@ -90,7 +91,7 @@ def YOLOv3(input_layer):
     conv_lbbox = convolutional(conv, 3, 1024)
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_lbbox dùng để dự đoán các vật thể lớn. Shape = [20,20,30]
-    conv_lbbox = convolutional(conv_lbbox, 1, 30, activation=False, bn=False)
+    conv_lbbox = convolutional(conv_lbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)
 
     # Từ lớp conv được chú thích là checkpoint1 ở trên ta áp dụng Conv2D và Upsampling2D để nối với route_2
     conv = convolutional(conv, 1, 256)
@@ -107,7 +108,7 @@ def YOLOv3(input_layer):
     conv_mbbox = convolutional(conv, 3, 512)
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_mbbox dùng để dự đoán các vật thể trung bình. Shape = [40,40,30]
-    conv_mbbox = convolutional(conv_mbbox, 1, 30, activation=False, bn=False)
+    conv_mbbox = convolutional(conv_mbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)
 
     # Từ lớp conv được chú thích là checkpoint2 ở trên ta áp dụng Conv2D và Upsampling2D để nối với route_1
     conv = convolutional(conv, 1, 128)
@@ -124,18 +125,19 @@ def YOLOv3(input_layer):
     conv_sbbox = convolutional(conv, 3, 256)
     # Dòng bên dưới sử dụng lớp convolutional với filter = 30 = B(3)*(4+1+C(5))
     # conv_sbbox dùng để dự đoán các vật thể trung nhỏ. Shape = [80,80,30]
-    conv_sbbox = convolutional(conv_mbbox, 1, 30, activation=False, bn=False)    
+    conv_sbbox = convolutional(conv_mbbox, 1, 3*(NUM_CLASS + 5), activation=False, bn=False)    
     # Trả về kết quả của filters các lớp dự đoán
     return [conv_sbbox, conv_mbbox, conv_lbbox]
 
-def Create_Yolov3(input_size=640, channels=3, training=False):
+def Create_Yolov3(input_size=640, channels=3, training=False, CLASSES=YOLO_COCO_CLASSES):
+    NUM_CLASS = len(read_class_names(CLASSES))
     # Init dữ liệu đầu vào sử dụng hàm input của tf
     input_layer  = Input([input_size, input_size, channels])
-    conv_tensors = YOLOv3(input_layer)
+    conv_tensors = YOLOv3(input_layer, NUM_CLASS)
     # Init dữ liệu đầu ra sử dụng hàm YOLOv3
     output_tensors = []
     for i, conv_tensor in enumerate(conv_tensors):
-        pred_tensor = decode(conv_tensor, i)
+        pred_tensor = decode(conv_tensor, NUM_CLASS, i)
         if training: output_tensors.append(conv_tensor)
         output_tensors.append(pred_tensor)
     # Tạo model bằng tf model
@@ -143,12 +145,12 @@ def Create_Yolov3(input_size=640, channels=3, training=False):
 
     return YoloV3
 
-def decode(conv_output, i=0):
+def decode(conv_output, NUM_CLASS, i=0):
     conv_shape       = tf.shape(conv_output)
     batch_size       = conv_shape[0]
     output_size      = conv_shape[1]
 
-    conv_output = tf.reshape(conv_output, (batch_size, output_size, output_size, 3, 10))
+    conv_output = tf.reshape(conv_output, (batch_size, output_size, output_size, 3, 5 + NUM_CLASS))
 
     conv_raw_dxdy = conv_output[:, :, :, :, 0:2] # Độ dời của điểm trọng tâm của bbox
     conv_raw_dwdh = conv_output[:, :, :, :, 2:4] # Độ dời của chiều dài và chiều rộng bbox
@@ -234,12 +236,13 @@ def bbox_giou(boxes1, boxes2):
 
     return giou
 
-def compute_loss(pred, conv, label, bboxes, i=0):
+def compute_loss(pred, conv, label, bboxes, i=0, CLASSES=YOLO_COCO_CLASSES):
+    NUM_CLASS = len(read_class_names(CLASSES))
     conv_shape  = tf.shape(conv)
     batch_size  = conv_shape[0]
     output_size = conv_shape[1]
     input_size  = STRIDES[i] * output_size
-    conv = tf.reshape(conv, (batch_size, output_size, output_size, 3, 10))
+    conv = tf.reshape(conv, (batch_size, output_size, output_size, 3, 5 + NUM_CLASS))
 
     conv_raw_conf = conv[:, :, :, :, 4:5]
     conv_raw_prob = conv[:, :, :, :, 5:]
