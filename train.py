@@ -30,6 +30,27 @@ def main():
     # Tạo model 
     yolo = Create_Yolov3()
 
+    # Đọc vào weights nếu train từ yolov3 gốc hoặc train từ checkpoint
+    if TRAIN_TRANSFER:
+        Darknet = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=YOLO_COCO_CLASSES)
+        load_yolo_weights(Darknet, Darknet_weights) # use darknet weights
+
+    if TRAIN_FROM_CHECKPOINT:
+        try:
+            yolo.load_weights(f"./checkpoints/{TRAIN_MODEL_NAME}")
+        except ValueError:
+            print("Shapes are incompatible, transfering Darknet weights")
+            TRAIN_FROM_CHECKPOINT = False
+
+    if TRAIN_TRANSFER and not TRAIN_FROM_CHECKPOINT:
+        for i, l in enumerate(Darknet.layers):
+            layer_weights = l.get_weights()
+            if layer_weights != []:
+                try:
+                    yolo.layers[i].set_weights(layer_weights)
+                except:
+                    print("skipping", yolo.layers[i].name)
+
     # Khai báo số step và epoch
     steps_per_epoch = len(trainset)
     global_steps = tf.Variable(1, trainable=False, dtype=tf.int64)
