@@ -1,5 +1,6 @@
 # YOLOv3 options
 YOLO_INPUT_SIZE = 640
+YOLO_FRAMEWORK = "tf"
 
 # Train options
 TRAIN_LOGDIR = "log"
