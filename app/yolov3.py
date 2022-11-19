@@ -11,7 +11,7 @@ from app.configs import *
 
 def read_class_names(class_filename):
     names = {}
-    with open(class_filename) as data:
+    with open(class_filename, 'r') as data:
         for ID, name in enumerate(data):
             names[ID] = name.strip('\n')
     return names
