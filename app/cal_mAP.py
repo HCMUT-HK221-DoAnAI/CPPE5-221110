@@ -1,9 +1,6 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.saved_model import tag_constants
-from app.dataset import Dataset
-from app.yolov3 import Create_Yolov3
 from app.utils import image_preprocess, postprocess_boxes, nms, read_class_names
 from app.configs import *
 import shutil
@@ -231,10 +228,3 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_
         print(text)
         
         return mAP*100
-
-if __name__ == '__main__':       
-    yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
-    yolo.load_weights(f"./checkpoints/{TRAIN_MODEL_NAME}") # use custom weights
-        
-    testset = Dataset('test', TEST_INPUT_SIZE=YOLO_INPUT_SIZE)
-    cal_mAP(yolo, testset, score_threshold=0.05, iou_threshold=0.50, TEST_INPUT_SIZE=YOLO_INPUT_SIZE)

@@ -20,7 +20,6 @@ tf.config.experimental.set_memory_growth(physical_devices[0], True)
 
 # Định nghĩa nội dung hàm main
 def main():
-    global TRAIN_FROM_CHECKPOINT
     # Tạo log để đọc bằng TensorBoard
     if os.path.exists(TRAIN_LOGDIR): shutil.rmtree(TRAIN_LOGDIR)
     writer = tf.summary.create_file_writer(TRAIN_LOGDIR)
