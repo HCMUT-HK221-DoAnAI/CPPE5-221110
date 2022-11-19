@@ -1,131 +1,118 @@
-# file tạo hàm tính mAP
-# ------------------------------------------------------------------------------
-# Import thư viện cần thiết
-
 import os
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
+from tensorflow.python.saved_model import tag_constants
+from app.dataset import Dataset
+from app.yolov3 import Create_Yolov3
+from app.utils import image_preprocess, postprocess_boxes, nms, read_class_names
 from app.configs import *
-from app.utils import *
 import shutil
 import json
 import time
 
-def voc_AP(precision, recall):
+gpus = tf.config.experimental.list_physical_devices('GPU')
+if len(gpus) > 0:
+    try: tf.config.experimental.set_memory_growth(gpus[0], True)
+    except RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')")
 
-    recall.insert(0, 0.0)   # 0.0 ở đầu danh sách
-    recall.append(1.0)      # 1.0 ở cuối danh sách      
-    m_recall = recall[:]
+def voc_ap(rec, prec):
 
-    precision.insert(0, 0.0)    # 0.0 ở đầu danh sách
-    precision.append(0.0)       # 0.0 ở cuối danh sách
-    m_precision = precision[:]
+    rec.insert(0, 0.0) # insert 0.0 at begining of list
+    rec.append(1.0) # insert 1.0 at end of list
+    mrec = rec[:]
+    prec.insert(0, 0.0) # insert 0.0 at begining of list
+    prec.append(0.0) # insert 0.0 at end of list
+    mpre = prec[:]
 
-    for index in range(len(m_precision) - 2, -1, -1):
-        m_precision[index] = max(m_precision[index], m_precision[index + 1])
+    for i in range(len(mpre)-2, -1, -1):
+        mpre[i] = max(mpre[i], mpre[i+1])
 
-    index_list = []
-    for index in range(1, len(m_recall)):
-        if m_recall[index] != m_recall[index + 1]:
-            index_list.append(index)
+    i_list = []
+    for i in range(1, len(mrec)):
+        if mrec[i] != mrec[i-1]:
+            i_list.append(i) # if it was matlab would be i + 1
 
     ap = 0.0
-    for index in index_list:
-        ap += (m_recall[index] - m_recall[index - 1]) * m_precision[index]
-    
-    return ap, m_recall, m_precision
+    for i in i_list:
+        ap += ((mrec[i]-mrec[i-1])*mpre[i])
+    return ap, mrec, mpre
 
-# Tạo hàm để tính mAP
-def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_SIZE=TEST_INPUT_SIZE):
-    
-    MINOVERLAP = 0.5
+
+def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_SIZE=TEST_INPUT_SIZE):
+    MINOVERLAP = 0.5 # default value (defined in the PASCAL VOC2012 challenge)
     NUM_CLASS = read_class_names(TRAIN_CLASSES)
 
-    # Path của Ground Truth <start>
+    ground_truth_dir_path = 'mAP/ground-truth'
+    if os.path.exists(ground_truth_dir_path): shutil.rmtree(ground_truth_dir_path)
 
-    ground_truth_dir_path = 'mAP/ground_truth'
-    if os.path.exists(ground_truth_dir_path):
-        shutil.rmtree(ground_truth_dir_path)
+    if not os.path.exists('mAP'): os.mkdir('mAP')
+    os.mkdir(ground_truth_dir_path)
 
-    if not os.path.exists('mAP'):
-        os.mkdir('mAP')
-        os.mkdir(ground_truth_dir_path)
+    print(f'\ncalculating mAP{int(iou_threshold*100)}...\n')
 
-    # Path của Ground Truth <end>
-
-    print(f'\nCalculating mAP{int(iou_threshold * 100)} . . .\n')
-
-    class_ground_truth_counter = {} # dictionary chứa số lượng của class vật thể trong data
+    gt_counter_per_class = {}
     for index in range(dataset.num_samples):
-        annotation_dataset = dataset.annotations[index]
+        ann_dataset = dataset.annotations[index]
 
-        # Lấy annotation trong data <start>
+        original_image, bbox_data_gt = dataset.parse_annotation(ann_dataset, True)
 
-        original_image, bbox_data_ground_truth = dataset.parse_annotation(annotation_dataset, True)
-
-        if len(bbox_data_ground_truth) == 0:
-            bboxes_ground_truth = []
-            classes_ground_truth = []
+        if len(bbox_data_gt) == 0:
+            bboxes_gt = []
+            classes_gt = []
         else:
-            bboxes_ground_truth = bbox_data_ground_truth[:, :4] # index đầu là danh sách vật thể, index sau là x, y, w, h?
-            classes_ground_truth = bbox_data_ground_truth[:, 4] # index đầu là danh sách vật thể, index sau là class name?
+            bboxes_gt, classes_gt = bbox_data_gt[:, :4], bbox_data_gt[:, 4]
+        ground_truth_path = os.path.join(ground_truth_dir_path, str(index) + '.txt')
+        num_bbox_gt = len(bboxes_gt)
 
-        # ground_truth_path = os.path.join(ground_truth_dir_path, str(index) + '.txt')
-        num_bbox_ground_truth = len(bboxes_ground_truth) # tổng số bounding box trong 1 sample
-
-        # Lấy annotation trong data <end>
-
-
-
-        bounding_boxes = [] # danh sách các bounding box
-
-        for i in range(num_bbox_ground_truth):
-            class_name = NUM_CLASS[classes_ground_truth[i]]
-            xmin, ymin, xmax, ymax = list(map(str, bboxes_ground_truth[i]))
+        bounding_boxes = []
+        for i in range(num_bbox_gt):
+            class_name = NUM_CLASS[classes_gt[i]]
+            xmin, ymin, xmax, ymax = list(map(str, bboxes_gt[i]))
             bbox = xmin + " " + ymin + " " + xmax + " " +ymax
             bounding_boxes.append({"class_name":class_name, "bbox":bbox, "used":False})
 
-            if class_name in class_ground_truth_counter:
-                class_ground_truth_counter[class_name] += 1
+            # count that object
+            if class_name in gt_counter_per_class:
+                gt_counter_per_class[class_name] += 1
             else:
-                class_ground_truth_counter[class_name] = 1
-
-            # bbox_mess = ' '.join([class_name, xmin, ymin, xmax, ymax]) + '\n'
-
+                # if class didn't exist yet
+                gt_counter_per_class[class_name] = 1
+            bbox_mess = ' '.join([class_name, xmin, ymin, xmax, ymax]) + '\n'
         with open(f'{ground_truth_dir_path}/{str(index)}_ground_truth.json', 'w') as outfile:
             json.dump(bounding_boxes, outfile)
 
-    ground_truth_classes = list(class_ground_truth_counter.keys())
-    ground_truth_classes = sorted(ground_truth_classes)
-    n_classes = len(ground_truth_classes)
+    gt_classes = list(gt_counter_per_class.keys())
+    # sort the classes alphabetically
+    gt_classes = sorted(gt_classes)
+    n_classes = len(gt_classes)
 
     times = []
-    json_predict = [[] for i in range(n_classes)]
-
+    json_pred = [[] for i in range(n_classes)]
     for index in range(dataset.num_samples):
-        annotation_dataset = dataset.annotations[index]
+        ann_dataset = dataset.annotations[index]
 
-        image_name = annotation_dataset[0].split('/')[-1]
-        original_image, bbox_data_ground_truth = dataset.parse_annotation(annotation_dataset, True)
-
+        image_name = ann_dataset[0].split('/')[-1]
+        original_image, bbox_data_gt = dataset.parse_annotation(ann_dataset, True)
+        
         image = image_preprocess(np.copy(original_image), [TEST_INPUT_SIZE, TEST_INPUT_SIZE])
         image_data = image[np.newaxis, ...].astype(np.float32)
 
         t1 = time.time()
+
         if tf.__version__ > '2.4.0':
             pred_bbox = Yolo(image_data)
         else:
             pred_bbox = Yolo.predict(image_data)
+        
         t2 = time.time()
-
-        times.append(t2 - t1)
-
+        
+        times.append(t2-t1)
+        
         pred_bbox = [tf.reshape(x, (-1, tf.shape(x)[-1])) for x in pred_bbox]
         pred_bbox = tf.concat(pred_bbox, axis=0)
 
         bboxes = postprocess_boxes(pred_bbox, original_image, TEST_INPUT_SIZE, score_threshold)
         bboxes = nms(bboxes, iou_threshold, method='nms')
-
 
         for bbox in bboxes:
             coor = np.array(bbox[:4], dtype=np.int32)
@@ -135,15 +122,15 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
             score = '%.4f' % score
             xmin, ymin, xmax, ymax = list(map(str, coor))
             bbox = xmin + " " + ymin + " " + xmax + " " +ymax
-            json_predict[ground_truth_classes.index(class_name)].append({"confidence": str(score), "file_id": str(index), "bbox": str(bbox)})
+            json_pred[gt_classes.index(class_name)].append({"confidence": str(score), "file_id": str(index), "bbox": str(bbox)})
 
-    ms = sum(times) * 1000 / len(times)
+    ms = sum(times)/len(times)*1000
     fps = 1000 / ms
 
-    for class_name in ground_truth_classes:
-        json_predict[ground_truth_classes.index(class_name)].sort(key=lambda x:float(x['confidence']), reverse=True)
+    for class_name in gt_classes:
+        json_pred[gt_classes.index(class_name)].sort(key=lambda x:float(x['confidence']), reverse=True)
         with open(f'{ground_truth_dir_path}/{class_name}_predictions.json', 'w') as outfile:
-            json.dump(json_predict[ground_truth_classes.index(class_name)], outfile)
+            json.dump(json_pred[gt_classes.index(class_name)], outfile)
 
     # Calculate the AP for each class
     sum_AP = 0.0
@@ -152,7 +139,7 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
     with open("mAP/results.txt", 'w') as results_file:
         results_file.write("# AP and precision/recall per class\n")
         count_true_positives = {}
-        for class_index, class_name in enumerate(ground_truth_classes):
+        for class_index, class_name in enumerate(gt_classes):
             count_true_positives[class_name] = 0
             # Load predictions of that class
             predictions_file = f'{ground_truth_dir_path}/{class_name}_predictions.json'
@@ -217,14 +204,14 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
             #print(tp)
             rec = tp[:]
             for idx, val in enumerate(tp):
-                rec[idx] = float(tp[idx]) / class_ground_truth_counter[class_name]
+                rec[idx] = float(tp[idx]) / gt_counter_per_class[class_name]
             #print(rec)
             prec = tp[:]
             for idx, val in enumerate(tp):
                 prec[idx] = float(tp[idx]) / (fp[idx] + tp[idx])
             #print(prec)
 
-            ap, mrec, mprec = voc_AP(rec, prec)
+            ap, mrec, mprec = voc_ap(rec, prec)
             sum_AP += ap
             text = "{0:.3f}%".format(ap*100) + " = " + class_name + " AP  " #class_name + " AP = {0:.2f}%".format(ap*100)
 
@@ -245,19 +232,9 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         
         return mAP*100
 
-
-# def main():
-#     gpus = tf.config.experimental.list_physical_devices('GPU')
-#     if len(gpus) > 0:
-#         try: 
-#             tf.config.experimental.set_memory_growth(gpus[0], True)
-#         except:
-#             RuntimeError: print("RuntimeError in tf.config.experimental.list_physical_devices('GPU')\n")
-
-
-#     return None
-
-
-
-# if __name__ == '__main__':
-#     main()
+if __name__ == '__main__':       
+    yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
+    yolo.load_weights(f"./checkpoints/{TRAIN_MODEL_NAME}") # use custom weights
+        
+    testset = Dataset('test', TEST_INPUT_SIZE=YOLO_INPUT_SIZE)
+    cal_mAP(yolo, testset, score_threshold=0.05, iou_threshold=0.50, TEST_INPUT_SIZE=YOLO_INPUT_SIZE)

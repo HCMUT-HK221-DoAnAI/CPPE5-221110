@@ -8,7 +8,13 @@ import numpy as np
 from keras.layers import Conv2D, Input, LeakyReLU, ZeroPadding2D, BatchNormalization
 from keras.regularizers import L2
 from app.configs import *
-from app.utils import *
+
+def read_class_names(class_filename):
+    names = {}
+    with open(class_filename) as data:
+        for ID, name in enumerate(data):
+            names[ID] = name.strip('\n')
+    return names
 
 class BatchNormalization(BatchNormalization):
     def call(self, x, training=False):
