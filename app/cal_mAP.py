@@ -95,6 +95,8 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         with open(f'{ground_truth_dir_path}/{str(index)}_ground_truth.json', 'w') as outfile:
             json.dump(bounding_boxes, outfile)
 
+    
+
     ground_truth_classes = list(class_ground_truth_counter.keys())
     ground_truth_classes = sorted(ground_truth_classes)
     n_classes = len(ground_truth_classes)
@@ -105,7 +107,7 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
     for index in range(dataset.num_samples):
         annotation_dataset = dataset.annotations[index]
 
-        image_name = annotation_dataset[0].split('/')[-1]
+        # image_name = annotation_dataset[0].split('/')[-1]
         original_image, bbox_data_ground_truth = dataset.parse_annotation(annotation_dataset, True)
 
         image = image_preprocess(np.copy(original_image), [TEST_INPUT_SIZE, TEST_INPUT_SIZE])
@@ -246,7 +248,7 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.5, TEST_INPUT_S
         results_file.write(text + "\n")
         print(text)
         
-        return mAP*100
+        return mAP * 100
 
 
 # def main():
