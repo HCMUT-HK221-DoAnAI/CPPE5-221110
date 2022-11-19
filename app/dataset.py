@@ -10,7 +10,7 @@ import tensorflow as tf
 import random
 # Định nghĩa nội dung Class Dataset
 class Dataset(object):
-    def __init__(self, dataset_type, TEST_INPUT_SIZE=TEST_INPUT_SIZE):
+    def __init__(self, dataset_type):
         self.annot_path  = TRAIN_ANNOT_PATH if dataset_type == 'train' else TEST_ANNOT_PATH
         self.input_sizes = TRAIN_INPUT_SIZE if dataset_type == 'train' else TEST_INPUT_SIZE
         self.batch_size  = TRAIN_BATCH_SIZE if dataset_type == 'train' else TEST_BATCH_SIZE
@@ -23,13 +23,13 @@ class Dataset(object):
         self.anchor_per_scale = YOLO_ANCHOR_PER_SCALE
         self.max_bbox_per_scale = YOLO_MAX_BBOX_PER_SCALE
 
-        self.annotations = self.load_annotations(dataset_type)
+        self.annotations = self.load_annotations()
         self.num_samples = len(self.annotations)
         self.num_batchs = int(np.ceil(self.num_samples / self.batch_size))
         self.batch_count = 0
 
 
-    def load_annotations(self, dataset_type):
+    def load_annotations(self):
         final_annotations = []
         with open(self.annot_path, 'r') as f:
             txt = f.read().splitlines()

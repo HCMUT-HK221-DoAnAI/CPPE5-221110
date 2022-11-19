@@ -6,6 +6,7 @@ import tensorflow as tf
 import random
 import colorsys
 from app.configs import *
+from app.yolov3 import *
 
 def load_yolo_weights(model, weights_file):
     tf.keras.backend.clear_session() # used to reset layer names
@@ -56,12 +57,19 @@ def load_yolo_weights(model, weights_file):
 
         assert len(wf.read()) == 0, 'failed to read all data'
 
-def read_class_names(class_filename):
-    names = {}
-    with open(class_filename) as data:
-        for ID, name in enumerate(data):
-            names[ID] = name.strip('\n')
-    return names
+def Load_Yolo_model():
+    gpus = tf.config.experimental.list_physical_devices('GPU')
+    if len(gpus) > 0:
+        print(f'GPUs {gpus}')
+        try: tf.config.experimental.set_memory_growth(gpus[0], True)
+        except RuntimeError: pass
+        
+    checkpoint = f"./checkpoints/{TRAIN_MODEL_NAME}"
+    print("Loading custom weights from:", checkpoint)
+    yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
+    yolo.load_weights(checkpoint)  # use custom weights
+
+    return yolo
 
 def image_preprocess(image, target_size, gt_boxes=None):
 
