@@ -24,8 +24,6 @@ def main():
     # Tạo log để đọc bằng TensorBoard
     if os.path.exists(TRAIN_LOGDIR): shutil.rmtree(TRAIN_LOGDIR)
     writer = tf.summary.create_file_writer(TRAIN_LOGDIR)
-    validate_writer = tf.summary.create_file_writer(TRAIN_LOGDIR)
-
     # Tạo dataset
     trainset = Dataset('train')
     testset = Dataset('test')
@@ -55,9 +53,10 @@ def main():
                     yolo.layers[i].set_weights(layer_weights)
                 except:
                     print("skipping", yolo.layers[i].name)
-
+    # Model summary
+    yolo.summary()
     # khai loại optimizer
-    optimizer = tf.keras.optimizers.Adam()
+    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-4, momentum=0.9)
 
     # Hàm để train và validate model
     def train_step(image_data, target):
@@ -65,7 +64,7 @@ def main():
             pred_result = yolo(image_data, training=True)
             giou_loss=conf_loss=prob_loss=0
 
-            # optimizing process
+            # Quá trình tối ưu (tinh chỉnh learning rate sau từng step)
             grid = 3
             for i in range(grid):
                 conv, pred = pred_result[i*2], pred_result[i*2+1]
@@ -80,7 +79,7 @@ def main():
             optimizer.apply_gradients(zip(gradients, yolo.trainable_variables))
 
             global_steps.assign_add(1)
-            if global_steps < warmup_steps:# and not TRAIN_TRANSFER:
+            if global_steps < warmup_steps:
                 lr = global_steps / warmup_steps * TRAIN_LR_INIT
             else:
                 lr = TRAIN_LR_END + 0.5 * (TRAIN_LR_INIT - TRAIN_LR_END)*(
@@ -98,6 +97,7 @@ def main():
             
         return global_steps.numpy(), optimizer.lr.numpy(), giou_loss.numpy(), conf_loss.numpy(), prob_loss.numpy(), total_loss.numpy()
     
+    validate_writer = tf.summary.create_file_writer(TRAIN_LOGDIR)
     def validate_step(image_data, target):
         with tf.GradientTape() as tape:
             pred_result = yolo(image_data, training=False)
@@ -117,8 +117,8 @@ def main():
     # ----------------------------------------------------------------
     # Tạo model dùng để đo mAP
     mAP_model = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
-    best_val_loss = 1000 # should be large at start
-    # In kết quả cho từng step đối với từng epoch trong quá trình train (verbose=1)
+    best_val_loss = 1000 # Giá trị lost init để cho tính năng TRAIN_SAVE_BEST_ONLY
+    # In kết quả cho từng step đối với từng epoch trong quá trình train
     for epoch in range(TRAIN_EPOCHS):
         for image_data, target in trainset:
             results = train_step(image_data, target)
@@ -162,7 +162,7 @@ def main():
             yolo.save_weights(save_directory)
     # Load weight đã thu được sau khi train vào trong model; gọi hàm tính mAP và xuất kết quả
     try:
-        mAP_model.load_weights(save_directory) # use keras weights
+        mAP_model.load_weights(save_directory)
         cal_mAP(mAP_model, testset, score_threshold=TEST_SCORE_THRESHOLD, iou_threshold=TEST_IOU_THRESHOLD)
     except UnboundLocalError:
         print("You don't have saved model weights to measure mAP, check TRAIN_SAVE_BEST_ONLY and TRAIN_SAVE_CHECKPOINT lines in configs.py")

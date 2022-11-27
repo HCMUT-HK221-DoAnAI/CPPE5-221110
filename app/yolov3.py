@@ -29,7 +29,7 @@ ANCHORS = (np.array(YOLO_ANCHORS).T/STRIDES).T
 def convolutional(input_shape, filters_shape, downsample=False, activation=True, bn=True):
     # Kiểm tra downsample
     if downsample is True:
-        input_shape = ZeroPadding2D(((1,0),(0,1)))(input_shape)
+        input_shape = ZeroPadding2D(((1,0),(1,0)))(input_shape) # Thêm padding vào phía trên và bên trái
         padding = 'valid'
         strides = 2
     else:

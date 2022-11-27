@@ -1,7 +1,10 @@
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import numpy as np
 import tensorflow as tf
 from app.utils import image_preprocess, postprocess_boxes, nms, read_class_names
+from app.yolov3 import Create_Yolov3
+from app.dataset import Dataset
 from app.configs import *
 import shutil
 import json
@@ -14,11 +17,11 @@ if len(gpus) > 0:
 
 def voc_ap(rec, prec):
 
-    rec.insert(0, 0.0) # insert 0.0 at begining of list
-    rec.append(1.0) # insert 1.0 at end of list
+    rec.insert(0, 0.0)
+    rec.append(1.0)
     mrec = rec[:]
-    prec.insert(0, 0.0) # insert 0.0 at begining of list
-    prec.append(0.0) # insert 0.0 at end of list
+    prec.insert(0, 0.0)
+    prec.append(0.0)
     mpre = prec[:]
 
     for i in range(len(mpre)-2, -1, -1):
@@ -27,7 +30,7 @@ def voc_ap(rec, prec):
     i_list = []
     for i in range(1, len(mrec)):
         if mrec[i] != mrec[i-1]:
-            i_list.append(i) # if it was matlab would be i + 1
+            i_list.append(i)
 
     ap = 0.0
     for i in i_list:
@@ -36,7 +39,7 @@ def voc_ap(rec, prec):
 
 
 def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_SIZE=TEST_INPUT_SIZE):
-    MINOVERLAP = 0.5 # default value (defined in the PASCAL VOC2012 challenge)
+    MINOVERLAP = 0.5
     NUM_CLASS = read_class_names(TRAIN_CLASSES)
 
     ground_truth_dir_path = 'mAP/ground-truth'
@@ -68,18 +71,16 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_
             bbox = xmin + " " + ymin + " " + xmax + " " +ymax
             bounding_boxes.append({"class_name":class_name, "bbox":bbox, "used":False})
 
-            # count that object
+            
             if class_name in gt_counter_per_class:
                 gt_counter_per_class[class_name] += 1
             else:
-                # if class didn't exist yet
                 gt_counter_per_class[class_name] = 1
             bbox_mess = ' '.join([class_name, xmin, ymin, xmax, ymax]) + '\n'
         with open(f'{ground_truth_dir_path}/{str(index)}_ground_truth.json', 'w') as outfile:
             json.dump(bounding_boxes, outfile)
 
     gt_classes = list(gt_counter_per_class.keys())
-    # sort the classes alphabetically
     gt_classes = sorted(gt_classes)
     n_classes = len(gt_classes)
 
@@ -129,7 +130,6 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_
         with open(f'{ground_truth_dir_path}/{class_name}_predictions.json', 'w') as outfile:
             json.dump(json_pred[gt_classes.index(class_name)], outfile)
 
-    # Calculate the AP for each class
     sum_AP = 0.0
     ap_dictionary = {}
     # open file to store the results
@@ -228,3 +228,9 @@ def cal_mAP(Yolo, dataset, score_threshold=0.25, iou_threshold=0.50, TEST_INPUT_
         print(text)
         
         return mAP*100
+
+if __name__ == '__main__':
+    yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
+    yolo.load_weights(f"./checkpoints/{TRAIN_MODEL_NAME}")
+    testset = Dataset('test', TEST_INPUT_SIZE=YOLO_INPUT_SIZE)
+    cal_mAP(yolo, testset, score_threshold=0.05, iou_threshold=0.50, TEST_INPUT_SIZE=YOLO_INPUT_SIZE)

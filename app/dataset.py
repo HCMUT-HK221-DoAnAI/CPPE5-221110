@@ -2,6 +2,7 @@
 # ------------------------------------------------------------------------------
 # Load các thư viện cần thiết
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 import cv2
 import numpy as np
 from app.utils import read_class_names, image_preprocess, bboxes_iou
@@ -27,7 +28,6 @@ class Dataset(object):
         self.num_samples = len(self.annotations)
         self.num_batchs = int(np.ceil(self.num_samples / self.batch_size))
         self.batch_count = 0
-
 
     def load_annotations(self):
         final_annotations = []

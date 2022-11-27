@@ -1,6 +1,5 @@
 # File 
 import os
-# os.environ['CUDA_VISIBLE_DEVICES'] = '0'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 from app.utils import detect_image, Load_Yolo_model
 from app.configs import *

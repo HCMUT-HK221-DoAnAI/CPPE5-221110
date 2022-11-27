@@ -9,8 +9,8 @@ from app.configs import *
 from app.yolov3 import *
 
 def load_yolo_weights(model, weights_file):
-    tf.keras.backend.clear_session() # used to reset layer names
-    # load Darknet original weights to TensorFlow model
+    tf.keras.backend.clear_session()
+    
     range1 = 75
     range2 = [58, 66, 74]
     
@@ -34,19 +34,15 @@ def load_yolo_weights(model, weights_file):
             in_dim = conv_layer.input_shape[-1]
 
             if i not in range2:
-                # darknet weights: [beta, gamma, mean, variance]
                 bn_weights = np.fromfile(wf, dtype=np.float32, count=4 * filters)
-                # tf weights: [gamma, beta, mean, variance]
                 bn_weights = bn_weights.reshape((4, filters))[[1, 0, 2, 3]]
                 bn_layer = model.get_layer(bn_layer_name)
                 j += 1
             else:
                 conv_bias = np.fromfile(wf, dtype=np.float32, count=filters)
 
-            # darknet shape (out_dim, in_dim, height, width)
             conv_shape = (filters, in_dim, k_size, k_size)
             conv_weights = np.fromfile(wf, dtype=np.float32, count=np.product(conv_shape))
-            # tf shape (height, width, in_dim, out_dim)
             conv_weights = conv_weights.reshape(conv_shape).transpose([2, 3, 1, 0])
 
             if i not in range2:
@@ -58,16 +54,16 @@ def load_yolo_weights(model, weights_file):
         assert len(wf.read()) == 0, 'failed to read all data'
 
 def Load_Yolo_model():
-    gpus = tf.config.experimental.list_physical_devices('GPU')
-    if len(gpus) > 0:
-        print(f'GPUs {gpus}')
-        try: tf.config.experimental.set_memory_growth(gpus[0], True)
-        except RuntimeError: pass
-        
+    # Kiểm tra có GPU hay không
+    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    physical_devices = tf.config.experimental.list_physical_devices('GPU')
+    assert len(physical_devices) > 0, "No GPU hardware available."
+    tf.config.experimental.set_memory_growth(physical_devices[0], True)
+
     checkpoint = f"./checkpoints/{TRAIN_MODEL_NAME}"
     print("Loading custom weights from:", checkpoint)
     yolo = Create_Yolov3(input_size=YOLO_INPUT_SIZE, CLASSES=TRAIN_CLASSES)
-    yolo.load_weights(checkpoint)  # use custom weights
+    yolo.load_weights(checkpoint)
 
     return yolo
 
@@ -203,9 +199,9 @@ def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, T
         score = bbox[4]
         class_ind = int(bbox[5])
         bbox_color = rectangle_colors if rectangle_colors != '' else colors[class_ind]
-        bbox_thick = int(0.6 * (image_h + image_w) / 1000)
+        bbox_thick = int(0.2 * (image_h + image_w) / 1000)
         if bbox_thick < 1: bbox_thick = 1
-        fontScale = 0.75 * bbox_thick
+        fontScale = 0.45 * bbox_thick
         (x1, y1), (x2, y2) = (coor[0], coor[1]), (coor[2], coor[3])
 
         # put object rectangle
@@ -253,15 +249,11 @@ def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=Fa
     bboxes = nms(bboxes, iou_threshold, method='nms')
 
     image = draw_bbox(original_image, bboxes, CLASSES=CLASSES, rectangle_colors=rectangle_colors)
-    # CreateXMLfile("XML_Detections", str(int(time.time())), original_image, bboxes, read_class_names(CLASSES))
 
     if output_path != '': cv2.imwrite(output_path, image)
     if show:
-        # Show the image
         cv2.imshow("predicted image", image)
-        # Load and hold the image
         cv2.waitKey(0)
-        # To close the window after the required kill value was provided
         cv2.destroyAllWindows()
         
     return image
