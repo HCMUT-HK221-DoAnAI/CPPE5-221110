@@ -6,7 +6,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'    #INFO messages are not printed
 import tensorflow as tf
 import numpy as np
 from keras.layers import Conv2D, Input, LeakyReLU, ZeroPadding2D, BatchNormalization
-from keras.regularizers import L2
+from keras.regularizers import l2
 from app.configs import *
 
 def read_class_names(class_filename):
@@ -37,7 +37,7 @@ def convolutional(input_shape, filters_shape, downsample=False, activation=True,
         strides = 1
     # Định nghĩa lớp Conv2D
     conv = Conv2D(filters=filters_shape[-1], kernel_size = filters_shape[0], strides=strides,
-                  padding=padding, use_bias=not bn, kernel_regularizer=L2(l2=0.0005),
+                  padding=padding, use_bias=not bn, kernel_regularizer=l2(0.0005),
                   kernel_initializer=tf.random_normal_initializer(stddev=0.01),
                   bias_initializer=tf.constant_initializer(0.))(input_shape)
     # Lớp conv có 2 loại, có và không BatchNormalization
