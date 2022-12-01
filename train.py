@@ -56,7 +56,7 @@ def main():
     # Model summary
     yolo.summary()
     # khai loại optimizer
-    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-4, momentum=0.9)
+    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3, momentum=0.9)
 
     # Hàm để train và validate model
     def train_step(image_data, target):
