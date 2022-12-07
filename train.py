@@ -13,7 +13,7 @@ from app.cal_mAP import cal_mAP
 from app.utils import load_yolo_weights
 
 # Kiểm tra có GPU hay không
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 physical_devices = tf.config.experimental.list_physical_devices('GPU')
 assert len(physical_devices) > 0, "No GPU hardware available."
 tf.config.experimental.set_memory_growth(physical_devices[0], True)

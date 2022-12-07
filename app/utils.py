@@ -56,7 +56,7 @@ def load_yolo_weights(model, weights_file):
 
 def Load_Yolo_model():
     # Kiểm tra có GPU hay không
-    os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+    os.environ["CUDA_VISIBLE_DEVICES"] = '0'
     physical_devices = tf.config.experimental.list_physical_devices('GPU')
     assert len(physical_devices) > 0, "No GPU hardware available."
     tf.config.experimental.set_memory_growth(physical_devices[0], True)
