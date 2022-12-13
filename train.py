@@ -56,7 +56,7 @@ def main():
     # Model summary
     yolo.summary()
     # khai loại optimizer
-    optimizer = tf.keras.optimizers.SGD(learning_rate=1e-3, momentum=0.9)
+    optimizer = tf.keras.optimizers.Adam()
 
     # Hàm để train và validate model
     def train_step(image_data, target):
@@ -169,4 +169,12 @@ def main():
 # ------------------------------------------------------------------------------
 # Gọi hàm main 
 if __name__ == '__main__':
-    main()
+    finished = False;
+    restart_count = 1
+    while not finished:
+        try:
+            main()
+            finished = True
+        except Exception:
+            print('Caught error timeth', restart_count)
+            restart_count += 1

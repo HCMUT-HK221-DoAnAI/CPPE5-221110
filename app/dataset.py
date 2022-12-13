@@ -58,6 +58,21 @@ class Dataset(object):
     def __iter__(self):
         return self
 
+    def Delete_bad_annotation(self, bad_annotation):
+        print(f'Deleting {bad_annotation} annotation line')
+        bad_image_path = bad_annotation[0]
+        bad_image_name = bad_annotation[0].split('/')[-1] # can be used to delete bad image
+        bad_xml_path = bad_annotation[0][:-3]+'xml' # can be used to delete bad xml file
+
+        # remove bad annotation line from annotation file
+        with open(self.annot_path, "r+") as f:
+            d = f.readlines()
+            f.seek(0)
+            for i in d:
+                if bad_image_name not in i:
+                    f.write(i)
+            f.truncate()
+
     def __next__(self):
         with tf.device('/cpu:0'):
             self.train_input_size = random.choice([self.train_input_sizes])
@@ -81,7 +96,14 @@ class Dataset(object):
                     index = self.batch_count * self.batch_size + num
                     if index >= self.num_samples: index -= self.num_samples
                     annotation = self.annotations[index]
-                    image, bboxes = self.parse_annotation(annotation)
+                    try:
+                        image, bboxes = self.parse_annotation(annotation)
+                    except ValueError:
+                        exceptions = True
+                        self.Delete_bad_annotation(annotation)
+                        print("Once\n")
+                        num += 1
+                        continue
                     try:
                         label_sbbox, label_mbbox, label_lbbox, sbboxes, mbboxes, lbboxes = self.preprocess_true_boxes(bboxes)
                     except IndexError:
@@ -94,7 +116,8 @@ class Dataset(object):
                     batch_label_lbbox[num, :, :, :, :] = label_lbbox
                     batch_mbboxes[num, :, :] = mbboxes
                     batch_lbboxes[num, :, :] = lbboxes
-
+                    batch_label_sbbox[num, :, :, :, :] = label_sbbox
+                    batch_sbboxes[num, :, :] = sbboxes
                     num += 1
 
                 if exceptions:
@@ -119,7 +142,10 @@ class Dataset(object):
             image_path = annotation[0]
             image = cv2.imread(image_path)
 
-        bboxes = np.array([list(map(int, box.split(','))) for box in annotation[1]])
+        try:
+            bboxes = np.array([list(map(int, box.split(','))) for box in annotation[1]])
+        except ValueError:
+            raise ValueError
 
         #image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         if mAP == True:
