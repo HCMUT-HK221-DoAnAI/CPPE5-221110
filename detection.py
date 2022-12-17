@@ -4,7 +4,7 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '1'
 from app.utils import Load_Yolo_model, detect_image, detect_realtime
 from app.configs import *
 
-image_path   = "./data/test/114_png.rf.6065afcc03288d34af746f3fd8fc4a1f.jpg"
+image_path   = "C:/Users/binh/Documents/GitHub/CPPE5-221110/mobile-detection/input.jpeg"
 
 yolo = Load_Yolo_model()
 yolo.summary()

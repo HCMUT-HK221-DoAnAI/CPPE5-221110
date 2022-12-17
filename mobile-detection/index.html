@@ -1,0 +1,58 @@
+<html>
+<!--<script src="chrome-extension://ljdobmomdgdljniojadhoplhkpialdid/page/prompt.js"></script>-->
+<!--<script src="chrome-extension://ljdobmomdgdljniojadhoplhkpialdid/page/runScript.js"></script>-->
+<head>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.3.1/dist/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+</head>
+<body>
+<div id="video-ctn">
+  <video autoplay id="videoElement"></video>
+  <canvas id="canvas2" style="width: 640px; height: 480px;"></canvas>
+  <div id="box-ctn"></div>
+</div>
+<br>
+<button onClick="start()" class="btn btn-outline-dark">START</button>
+<script src="index.js"></script>
+<style>
+body {
+  margin: 0;
+}
+#video-ctn {
+  position: relative;
+  width: 640px;
+  height: 480px;
+}
+video {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  transform: scale(0.2);
+  bottom: -40%;
+  right: -40%;
+  z-index: 999
+}
+.rect {
+  position: absolute;
+  border: 2px solid #f00;
+}
+.rect .className {
+  position: absolute;
+  top: 0;
+  background: #f00;
+  color: #fff;
+}
+#box-ctn {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+#canvas2 {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+</style>
+</body>
+</html>

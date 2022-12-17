@@ -179,7 +179,6 @@ def nms(bboxes, iou_threshold, sigma=0.3, method='nms'):
             cls_bboxes[:, 4] = cls_bboxes[:, 4] * weight
             score_mask = cls_bboxes[:, 4] > 0.
             cls_bboxes = cls_bboxes[score_mask]
-
     return best_bboxes
 
 def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, Text_colors=(255,255,0), rectangle_colors='', tracking=False):   
@@ -232,6 +231,28 @@ def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, T
 
     return image
 
+
+def detect_image_http(Yolo, image_path, output_path, CLASSES, input_size=416, show=False, score_threshold=0.3,
+                 iou_threshold=0.45, rectangle_colors=''):
+    original_image = cv2.imread(image_path)
+    original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+    original_image = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
+
+    image_data = image_preprocess(np.copy(original_image), [input_size, input_size])
+    image_data = image_data[np.newaxis, ...].astype(np.float32)
+
+    # Tạo box dự đoán vật thể
+    pred_bbox = Yolo.predict(image_data)
+
+    pred_bbox = [tf.reshape(x, (-1, tf.shape(x)[-1])) for x in pred_bbox]
+    pred_bbox = tf.concat(pred_bbox, axis=0)
+
+    bboxes = postprocess_boxes(pred_bbox, original_image, input_size, score_threshold)
+    bboxes = nms(bboxes, iou_threshold, method='nms')
+
+    return bboxes
+
+
 def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=False, score_threshold=0.3, iou_threshold=0.45, rectangle_colors=''):
     original_image      = cv2.imread(image_path)
     original_image      = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
@@ -242,6 +263,7 @@ def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=Fa
 
     # Tạo box dự đoán vật thể
     pred_bbox = Yolo.predict(image_data)
+    print(pred_bbox)
         
     pred_bbox = [tf.reshape(x, (-1, tf.shape(x)[-1])) for x in pred_bbox]
     pred_bbox = tf.concat(pred_bbox, axis=0)
@@ -249,6 +271,7 @@ def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=Fa
     bboxes = postprocess_boxes(pred_bbox, original_image, input_size, score_threshold)
     bboxes = nms(bboxes, iou_threshold, method='nms')
 
+    print(bboxes)
     image = draw_bbox(original_image, bboxes, CLASSES=CLASSES, rectangle_colors=rectangle_colors)
 
     if output_path != '': cv2.imwrite(output_path, image)

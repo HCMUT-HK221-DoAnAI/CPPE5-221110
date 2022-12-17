@@ -134,3 +134,4 @@ data/
 checkpoints/
 log/
 map/
+tfjs_model/
