@@ -200,7 +200,7 @@ def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, T
         score = bbox[4]
         class_ind = int(bbox[5])
         bbox_color = rectangle_colors if rectangle_colors != '' else colors[class_ind]
-        bbox_thick = int(0.2 * (image_h + image_w) / 1000)
+        bbox_thick = int(0.8 * (image_h + image_w) / 1000)
         if bbox_thick < 1: bbox_thick = 1
         fontScale = 0.45 * bbox_thick
         (x1, y1), (x2, y2) = (coor[0], coor[1]), (coor[2], coor[3])
@@ -232,7 +232,7 @@ def draw_bbox(image, bboxes, CLASSES, show_label=True, show_confidence = True, T
 
     return image
 
-def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=False, score_threshold=0.3, iou_threshold=0.45, rectangle_colors=''):
+def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=False, score_threshold=0.4, iou_threshold=0.45, rectangle_colors=''):
     original_image      = cv2.imread(image_path)
     original_image      = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
     original_image      = cv2.cvtColor(original_image, cv2.COLOR_BGR2RGB)
@@ -259,7 +259,7 @@ def detect_image(Yolo, image_path, output_path, CLASSES, input_size=416, show=Fa
         
     return image
 
-def detect_realtime(Yolo, output_path, input_size=416, show=False, CLASSES=YOLO_COCO_CLASSES, score_threshold=0.3, iou_threshold=0.45, rectangle_colors=''):
+def detect_realtime(Yolo, output_path, input_size=416, show=False, CLASSES=YOLO_COCO_CLASSES, score_threshold=0.4, iou_threshold=0.45, rectangle_colors=''):
     times = []
     vid = cv2.VideoCapture(0)
 
